@@ -1,14 +1,3 @@
-#!/usr/bin/env python
-# encoding: utf-8
-'''
-@project : MSRGCN
-@file    : config.py
-@author  : Droliven
-@contact : droliven@163.com
-@ide     : PyCharm
-@time    : 2021-07-27 16:56
-'''
-
 import os
 import getpass
 import torch
@@ -130,9 +119,9 @@ class Config():
             os.makedirs(os.path.join(self.ckpt_dir, "images"))
 
         if self.exp_name == "h36m":
-            self.base_data_dir = os.path.join("F:\model_report_data\mocap_motion_prediction\data\human36mData3D\others", "h3.6m\dataset")
+            self.base_data_dir = os.path.join("/content/gdrive/MyDrive/MSR/data/h3.6m/dataset")
         elif self.exp_name == "cmu":
-            self.base_data_dir = os.path.join("F:\model_report_data\mocap_motion_prediction", "data\cmu")
+            self.base_data_dir = os.path.join("/content/gdrive/MyDrive/MSR/data/cmu_mocap")
 
 
 
