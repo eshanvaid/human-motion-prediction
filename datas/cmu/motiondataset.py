@@ -1,20 +1,11 @@
 #!/usr/bin/env python
 # encoding: utf-8
-'''
-@project : MSRGCN
-@file    : motiondataset.py
-@author  : Droliven
-@contact : droliven@163.com
-@ide     : PyCharm
-@time    : 2021-07-27 21:02
-'''
 
 from torch.utils.data import Dataset
 import numpy as np
 import os
 from .. import data_utils
 from ..multi_scale import downs_from_22
-from ..dct import get_dct_matrix, dct_transform_numpy
 
 class MotionDataset(Dataset):
 
@@ -32,15 +23,12 @@ class MotionDataset(Dataset):
         """
         self.split = split
         acts = data_utils.define_actions_cmu(actions)
-        # 训练集
         if split == 0:
             path_to_data = os.path.join(path_to_data, 'train')
             is_test = False
-        # 随机取 8 帧
         elif split == 1:
             path_to_data = os.path.join(path_to_data, 'test')
             is_test = True
-        # 取全部的测试集，制造一个整理的测试集
         elif split == 2:
             path_to_data = os.path.join(path_to_data, 'test')
             is_test = False
@@ -58,19 +46,11 @@ class MotionDataset(Dataset):
 
         gt_all_scales = {'p32': gt_32, 'p22': gt_22}
         gt_all_scales = downs_from_22(gt_all_scales, down_key=down_key)
-        # 重复已知最后一帧
         input_all_scales = {}
         for k in gt_all_scales.keys():
             input_all_scales[k] = np.concatenate((gt_all_scales[k][:, :, :input_n],
                                                   np.repeat(gt_all_scales[k][:, :, input_n - 1:input_n], output_n,
                                                             axis=-1)), axis=-1)
-
-        # DCT *********************
-        self.dct_used = dct_used
-        self.dct_m, self.idct_m = get_dct_matrix(input_n + output_n)
-
-        for k in input_all_scales:
-            input_all_scales[k] = dct_transform_numpy(input_all_scales[k], self.dct_m, dct_used)
 
         # Max min norm to -1 -> 1 ***********
         self.global_max = global_max
@@ -93,7 +73,6 @@ class MotionDataset(Dataset):
             input_all_scales[k] = (input_all_scales[k] - self.global_min) / (self.global_max - self.global_min)
             input_all_scales[k] = input_all_scales[k] * 2 - 1
 
-        # todo 加速调试 *********************************
         little = np.arange(0, input_all_scales[list(input_all_scales.keys())[0]].shape[0], debug_step)
         for k in input_all_scales:
             input_all_scales[k] = input_all_scales[k][little]

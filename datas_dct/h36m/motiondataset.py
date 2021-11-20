@@ -5,6 +5,7 @@ from torch.utils.data import Dataset
 import numpy as np
 from .. import data_utils
 from ..multi_scale import downs_from_22
+from ..dct import get_dct_matrix, dct_transform_numpy
 
 class MotionDataset(Dataset):
 
@@ -34,6 +35,13 @@ class MotionDataset(Dataset):
         input_all_scales = {}
         for k in gt_all_scales.keys():
             input_all_scales[k] = np.concatenate((gt_all_scales[k][:, :, :input_n], np.repeat(gt_all_scales[k][:, :, input_n-1:input_n], output_n, axis=-1)), axis=-1)
+
+        # DCT *********************
+        self.dct_used = dct_used
+        self.dct_m, self.idct_m = get_dct_matrix(input_n + output_n)
+
+        for k in input_all_scales:
+            input_all_scales[k] = dct_transform_numpy(input_all_scales[k], self.dct_m, dct_used)
 
         # Max min norm to -1 -> 1 ***********
         self.global_max = global_max

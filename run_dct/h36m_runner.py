@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # encoding: utf-8
 
-from datas_dct import H36MMotionDataset, define_actions,draw_pic_gt_pred
+from datas_dct import H36MMotionDataset, get_dct_matrix, reverse_dct_torch, define_actions,draw_pic_gt_pred
 from nets import MSRGCN, MSRGCNShortTerm
 from configs.config import Config
 
@@ -71,6 +71,9 @@ class H36MRunner():
         self.lr = self.cfg.lr
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
 
+        dct_m, i_dct_m = get_dct_matrix(self.cfg.seq_len)
+        self.dct_m = torch.from_numpy(dct_m).float()
+        self.i_dct_m = torch.from_numpy(i_dct_m).float()
         if self.cfg.device != "cpu":
             self.dct_m = self.dct_m.cuda(self.cfg.device, non_blocking=True)
             self.i_dct_m = self.i_dct_m.cuda(self.cfg.device, non_blocking=True)
@@ -153,6 +156,7 @@ class H36MRunner():
                 outputs[k] = (outputs[k] + 1) / 2
                 outputs[k] = outputs[k] * (self.global_max - self.global_min) + self.global_min
 
+                outputs[k] = reverse_dct_torch(outputs[k], self.i_dct_m, self.cfg.seq_len)
 
                 # loss
                 loss_curr = L2NormLoss_train(gts[k], outputs[k])
@@ -190,6 +194,8 @@ class H36MRunner():
                     for k in outputs:
                         outputs[k] = (outputs[k] + 1) / 2
                         outputs[k] = outputs[k] * (self.global_max - self.global_min) + self.global_min
+
+                        outputs[k] = reverse_dct_torch(outputs[k], self.i_dct_m, self.cfg.seq_len)
 
                     mygt = gts['p32'].view(-1, self.cfg.origin_noden, 3, self.cfg.seq_len).clone()
                     myout = outputs['p22'].view(-1, self.cfg.final_out_noden, 3, self.cfg.seq_len)

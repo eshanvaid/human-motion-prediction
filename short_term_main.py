@@ -27,8 +27,8 @@ import argparse
 import pandas as pd
 from pprint import pprint
 
-from run import H36MRunner, CMURunner
-from datas import define_actions, define_actions_cmu
+from run_dct import H36MRunner, CMURunner
+from datas_dct import define_actions, define_actions_cmu
 
 parser = argparse.ArgumentParser(description='manual to this script')
 parser.add_argument('--exp_name', type=str, default="cmu", help="h36m / cmu")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # encoding: utf-8
 
-from datas_dct import H36MMotionDataset, define_actions,draw_pic_gt_pred
+from datas_dct import CMUMotionDataset, get_dct_matrix, reverse_dct_torch, define_actions_cmu, draw_pic_gt_pred
 from nets import MSRGCN, MSRGCNShortTerm
 from configs.config import Config
 
@@ -44,10 +44,9 @@ def lr_decay(optimizer, lr_now, gamma):
         param_group['lr'] = lr
     return lr
 
-
-class H36MRunner():
-    def __init__(self, exp_name="h36m", input_n=10, output_n=10, dct_n=15, device="cuda:0", num_works=0, test_manner="all", debug_step=1):
-        super(H36MRunner, self).__init__()
+class CMURunner():
+    def __init__(self, exp_name="cmu", input_n=10, output_n=10, dct_n=15, device="cuda:0", num_works=0, test_manner="all", debug_step=1):
+        super(CMURunner, self).__init__()
 
         self.start_epoch = 1
         self.best_accuracy = 1e15
@@ -71,15 +70,20 @@ class H36MRunner():
         self.lr = self.cfg.lr
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
 
+        dct_m, i_dct_m = get_dct_matrix(self.cfg.seq_len)
+        self.dct_m = torch.from_numpy(dct_m).float()
+        self.i_dct_m = torch.from_numpy(i_dct_m).float()
         if self.cfg.device != "cpu":
             self.dct_m = self.dct_m.cuda(self.cfg.device, non_blocking=True)
             self.i_dct_m = self.i_dct_m.cuda(self.cfg.device, non_blocking=True)
 
-        train_dataset = H36MMotionDataset(self.cfg.base_data_dir, actions="all", mode_name="train", input_n=self.cfg.input_n, output_n=self.cfg.output_n,
+        train_dataset = CMUMotionDataset(self.cfg.base_data_dir, actions="all", mode_name="train", input_n=self.cfg.input_n, output_n=self.cfg.output_n,
                                       dct_used=self.cfg.dct_n, split=0, sample_rate=2,
                                           down_key=[('p22', 'p12', self.cfg.Index2212),
                                               ('p12', 'p7', self.cfg.Index127),
                                               ('p7', 'p4', self.cfg.Index74)], test_manner=self.cfg.test_manner, global_max=0, global_min=0, device=self.cfg.device, debug_step=debug_step)
+
+
         print("train data shape {}".format(train_dataset.gt_all_scales['p32'].shape[0]))
 
         self.train_loader = DataLoader(
@@ -93,8 +97,8 @@ class H36MRunner():
         self.global_min = train_dataset.global_min
 
         self.test_loader = dict()
-        for act in define_actions("all"):
-            test_dataset = H36MMotionDataset(self.cfg.base_data_dir, actions=act, mode_name="test", input_n=self.cfg.input_n, output_n=self.cfg.output_n,
+        for act in define_actions_cmu("all"):
+            test_dataset = CMUMotionDataset(self.cfg.base_data_dir, actions=act, mode_name="test", input_n=self.cfg.input_n, output_n=self.cfg.output_n,
                                       dct_used=self.cfg.dct_n, split=1, sample_rate=2,
                                           down_key=[('p22', 'p12', self.cfg.Index2212),
                                               ('p12', 'p7', self.cfg.Index127),
@@ -120,7 +124,6 @@ class H36MRunner():
         }
         torch.save(state, checkpoint_path)
 
-
     def restore(self, checkpoint_path):
         state = torch.load(checkpoint_path, map_location=self.cfg.device)
         self.model.load_state_dict(state["model"])
@@ -128,12 +131,13 @@ class H36MRunner():
         self.lr = state["lr"]
         best_err = state['best_err']
         curr_err = state["curr_err"]
-        print("load lr {}, curr_avg {}, best_avg {}.".format(state["lr"], curr_err, best_err))
+        print("load from lr {}, curr_avg {}, best_avg {}.".format(state["lr"], curr_err, best_err))
 
 
     def train(self, epoch):
         self.model.train()
         average_loss = 0
+
         for i, (inputs, gts) in tqdm(enumerate(self.train_loader), total=len(self.train_loader)):
             b, cv, t_len = inputs[list(inputs.keys())[0]].shape
             # skip the last batch if only have one sample for batch_norm layers
@@ -153,6 +157,7 @@ class H36MRunner():
                 outputs[k] = (outputs[k] + 1) / 2
                 outputs[k] = outputs[k] * (self.global_max - self.global_min) + self.global_min
 
+                outputs[k] = reverse_dct_torch(outputs[k], self.i_dct_m, self.cfg.seq_len)
 
                 # loss
                 loss_curr = L2NormLoss_train(gts[k], outputs[k])
@@ -165,7 +170,6 @@ class H36MRunner():
             self.optimizer.zero_grad()
             losses.backward()
             self.optimizer.step()
-
             average_loss += losses.cpu().data.numpy()
 
         average_loss /= (i + 1)
@@ -175,9 +179,9 @@ class H36MRunner():
         self.model.eval()
 
         frame_ids = self.cfg.frame_ids
-        total_loss = np.zeros((len(define_actions("all")), len(frame_ids)))
+        total_loss = np.zeros((len(define_actions_cmu("all")), len(frame_ids)))
 
-        for act_idx, act in enumerate(define_actions("all")):
+        for act_idx, act in enumerate(define_actions_cmu("all")):
             count = 0
 
             for i, (inputs, gts) in enumerate(self.test_loader[act]):
@@ -191,6 +195,8 @@ class H36MRunner():
                         outputs[k] = (outputs[k] + 1) / 2
                         outputs[k] = outputs[k] * (self.global_max - self.global_min) + self.global_min
 
+                        outputs[k] = reverse_dct_torch(outputs[k], self.i_dct_m, self.cfg.seq_len)
+
                     mygt = gts['p32'].view(-1, self.cfg.origin_noden, 3, self.cfg.seq_len).clone()
                     myout = outputs['p22'].view(-1, self.cfg.final_out_noden, 3, self.cfg.seq_len)
                     mygt[:, self.cfg.dim_used_3d, :, :] = myout
@@ -201,14 +207,12 @@ class H36MRunner():
                     total_loss[act_idx] += loss
                     # count += 1
                     count += mygt.shape[0]
+
                     if act_idx == 0 and i == 0:
-                        pred_seq = outputs['p22'].cpu().data.numpy()[0].reshape(self.cfg.final_out_noden, 3,
-                                                                                self.cfg.seq_len)
+                        pred_seq = outputs['p22'].cpu().data.numpy()[0].reshape(self.cfg.final_out_noden, 3, self.cfg.seq_len)
                         gt_seq = gts['p22'].cpu().data.numpy()[0].reshape(self.cfg.final_out_noden, 3, self.cfg.seq_len)
                         for t in range(self.cfg.seq_len):
-                            draw_pic_gt_pred(gt_seq[:, :, t], pred_seq[:, :, t], self.cfg.I22_plot, self.cfg.J22_plot,
-                                             self.cfg.LR22_plot,
-                                             os.path.join(self.cfg.ckpt_dir, "images", f"{epoch}_{act}_{t}.png"))
+                            draw_pic_gt_pred(gt_seq[:, :, t], pred_seq[:, :, t], self.cfg.I22_plot, self.cfg.J22_plot, self.cfg.LR22_plot, os.path.join(self.cfg.ckpt_dir, "images", f"{epoch}_{act}_{t}.png"))
 
             total_loss[act_idx] /= count
             for fidx, frame in enumerate(frame_ids):
@@ -228,22 +232,20 @@ class H36MRunner():
             self.summary.add_scalar("LR", self.lr, epoch)
 
             average_train_loss = self.train(epoch)
-
             if average_train_loss < self.best_accuracy:
                 self.best_accuracy = average_train_loss
-                self.save(os.path.join(self.cfg.ckpt_dir, "models",
+                self.save(
+                    os.path.join(self.cfg.ckpt_dir, "models",
                                  '{}_in{}out{}dctn{}_best_epoch{}_err{:.4f}.pth'.format(self.cfg.exp_name,
                                                                                         self.cfg.input_n,
                                                                                         self.cfg.output_n,
                                                                                         self.cfg.dct_n, epoch,
-                                                                                        average_train_loss)),
-                    self.best_accuracy, average_train_loss)
+                                                                                        average_train_loss)), self.best_accuracy, average_train_loss)
 
             self.save(os.path.join(self.cfg.ckpt_dir, "models",
                                    '{}_in{}out{}dctn{}_last.pth'.format(self.cfg.exp_name, self.cfg.input_n,
                                                                         self.cfg.output_n, self.cfg.dct_n)),
                       self.best_accuracy, average_train_loss)
-
             if epoch % 1 == 0:
                 loss_l2_test = self.test(epoch)
 

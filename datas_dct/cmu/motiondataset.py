@@ -3,12 +3,16 @@
 
 from torch.utils.data import Dataset
 import numpy as np
+import os
 from .. import data_utils
 from ..multi_scale import downs_from_22
+from ..dct import get_dct_matrix, dct_transform_numpy
 
 class MotionDataset(Dataset):
 
-    def __init__(self, path_to_data, actions, mode_name="train", input_n=20, output_n=10, dct_used=15, split=0, sample_rate=2, down_key=[('p22', 'p12', []), ('p12', 'p7', []), ('p7', 'p4', [])], test_manner="all", global_max=0, global_min=0, device="cuda:0", debug_step=100):
+    def __init__(self, path_to_data, actions, mode_name="train", input_n=20, output_n=10, dct_used=15, split=0,
+                 sample_rate=2, down_key=[('p22', 'p12', []), ('p12', 'p7', []), ('p7', 'p4', [])], test_manner="all",
+                 global_max=0, global_min=0, data_mean=0, data_std=0, dim_use=[], device="cuda:0", debug_step=100):
         """
         :param path_to_data:
         :param actions:
@@ -18,22 +22,43 @@ class MotionDataset(Dataset):
         :param split: 0 train, 1 testing, 2 validation
         :param sample_rate:
         """
-        self.path_to_data = path_to_data
         self.split = split
+        acts = data_utils.define_actions_cmu(actions)
+        if split == 0:
+            path_to_data = os.path.join(path_to_data, 'train')
+            is_test = False
+        elif split == 1:
+            path_to_data = os.path.join(path_to_data, 'test')
+            is_test = True
+        elif split == 2:
+            path_to_data = os.path.join(path_to_data, 'test')
+            is_test = False
 
-        subs = [[1, 6, 7, 8, 9], [5], [11]]
-        acts = data_utils.define_actions(actions)
+        all_seqs, dim_ignore, dim_use, data_mean, data_std = data_utils.load_data_cmu_3d(path_to_data, acts,
+                                                                                         input_n, output_n,
+                                                                                         sample_rate=sample_rate,
+                                                                                         data_std=data_std,
+                                                                                         data_mean=data_mean,
+                                                                                         is_test=is_test, device=device, test_manner=test_manner)
 
-        subjs = subs[split]
-        all_seqs, dim_ignore, dim_used = data_utils.load_data_3d(path_to_data, subjs, acts, sample_rate, input_n + output_n, test_manner=test_manner, device=device)
-        gt_32 = all_seqs.transpose(0, 2, 1)  # b, 96, 35
-        gt_22 = gt_32[:, dim_used, :]
+
+        gt_32 = all_seqs.transpose(0, 2, 1)  # b, 114, 35
+        gt_22 = gt_32[:, dim_use, :]  # # b, 75, 35
 
         gt_all_scales = {'p32': gt_32, 'p22': gt_22}
         gt_all_scales = downs_from_22(gt_all_scales, down_key=down_key)
         input_all_scales = {}
         for k in gt_all_scales.keys():
-            input_all_scales[k] = np.concatenate((gt_all_scales[k][:, :, :input_n], np.repeat(gt_all_scales[k][:, :, input_n-1:input_n], output_n, axis=-1)), axis=-1)
+            input_all_scales[k] = np.concatenate((gt_all_scales[k][:, :, :input_n],
+                                                  np.repeat(gt_all_scales[k][:, :, input_n - 1:input_n], output_n,
+                                                            axis=-1)), axis=-1)
+
+        # DCT *********************
+        self.dct_used = dct_used
+        self.dct_m, self.idct_m = get_dct_matrix(input_n + output_n)
+
+        for k in input_all_scales:
+            input_all_scales[k] = dct_transform_numpy(input_all_scales[k], self.dct_m, dct_used)
 
         # Max min norm to -1 -> 1 ***********
         self.global_max = global_max
@@ -74,6 +99,7 @@ class MotionDataset(Dataset):
             gts[k] = self.gt_all_scales[k][item]
             inputs[k] = self.input_all_scales[k][item]
         return inputs, gts
+
 
 if __name__ == '__main__':
     pass
