@@ -1,14 +1,5 @@
 #!/usr/bin/env python
 # encoding: utf-8
-'''
-@project : MSRGCN
-@file    : cmu_runner.py
-@author  : Droliven
-@contact : droliven@163.com
-@ide     : PyCharm
-@time    : 2021-07-28 13:29
-'''
-
 
 from datas import CMUMotionDataset, get_dct_matrix, reverse_dct_torch, define_actions_cmu, draw_pic_gt_pred
 from nets import MSRGCN, MSRGCNShortTerm
@@ -40,7 +31,6 @@ def L2NormLoss_test(gt, out, frame_ids):  # (batch size,feature dim, seq len)
 def L2NormLoss_train(gt, out):
     '''
     # (batch size,feature dim, seq len)
-    等同于 mpjpe_error_p3d()
     '''
     batch_size, _, seq_len = gt.shape
     gt = gt.view(batch_size, -1, 3, seq_len).permute(0, 3, 1, 2).contiguous()
@@ -58,7 +48,6 @@ class CMURunner():
     def __init__(self, exp_name="cmu", input_n=10, output_n=10, dct_n=15, device="cuda:0", num_works=0, test_manner="all", debug_step=1):
         super(CMURunner, self).__init__()
 
-        # 参数
         self.start_epoch = 1
         self.best_accuracy = 1e15
 
@@ -68,7 +57,6 @@ class CMURunner():
         print("==========================================\n")
         with open(os.path.join(self.cfg.ckpt_dir, "config.txt"), 'w', encoding='utf-8') as f:
             f.write(str(self.cfg.__dict__))
-        # 模型
         if self.cfg.output_n == 25:
             self.model = MSRGCN(self.cfg.p_dropout, self.cfg.leaky_c, self.cfg.final_out_noden, input_feature=self.cfg.dct_n)
         elif self.cfg.output_n == 10:
@@ -82,7 +70,6 @@ class CMURunner():
         self.lr = self.cfg.lr
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
 
-        # 数据
         dct_m, i_dct_m = get_dct_matrix(self.cfg.seq_len)
         self.dct_m = torch.from_numpy(dct_m).float()
         self.i_dct_m = torch.from_numpy(i_dct_m).float()
@@ -167,11 +154,9 @@ class CMURunner():
 
             losses = None
             for k in outputs:
-                # 反 Norm
                 outputs[k] = (outputs[k] + 1) / 2
                 outputs[k] = outputs[k] * (self.global_max - self.global_min) + self.global_min
 
-                # 回转空间
                 outputs[k] = reverse_dct_torch(outputs[k], self.i_dct_m, self.cfg.seq_len)
 
                 # loss
@@ -206,15 +191,12 @@ class CMURunner():
                     gts[k] = gts[k].float().cuda(non_blocking=True, device=self.cfg.device)
                 with torch.no_grad():
                     outputs = self.model(inputs)
-                    # 反 Norm
                     for k in outputs:
                         outputs[k] = (outputs[k] + 1) / 2
                         outputs[k] = outputs[k] * (self.global_max - self.global_min) + self.global_min
 
-                        # 回转空间
                         outputs[k] = reverse_dct_torch(outputs[k], self.i_dct_m, self.cfg.seq_len)
 
-                    # 开始计算
                     mygt = gts['p32'].view(-1, self.cfg.origin_noden, 3, self.cfg.seq_len).clone()
                     myout = outputs['p22'].view(-1, self.cfg.final_out_noden, 3, self.cfg.seq_len)
                     mygt[:, self.cfg.dim_used_3d, :, :] = myout
@@ -226,7 +208,6 @@ class CMURunner():
                     # count += 1
                     count += mygt.shape[0]
 
-                    # ************ 画图
                     if act_idx == 0 and i == 0:
                         pred_seq = outputs['p22'].cpu().data.numpy()[0].reshape(self.cfg.final_out_noden, 3, self.cfg.seq_len)
                         gt_seq = gts['p22'].cpu().data.numpy()[0].reshape(self.cfg.final_out_noden, 3, self.cfg.seq_len)
