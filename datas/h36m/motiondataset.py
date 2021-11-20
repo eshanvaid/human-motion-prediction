@@ -1,13 +1,5 @@
 #!/usr/bin/env python
 # encoding: utf-8
-'''
-@project : MSRGCN
-@file    : dataset.py
-@author  : Droliven
-@contact : droliven@163.com
-@ide     : PyCharm
-@time    : 2021-07-27 20:16
-'''
 
 from torch.utils.data import Dataset
 import numpy as np
@@ -40,7 +32,6 @@ class MotionDataset(Dataset):
 
         gt_all_scales = {'p32': gt_32, 'p22': gt_22}
         gt_all_scales = downs_from_22(gt_all_scales, down_key=down_key)
-        # 重复已知最后一帧
         input_all_scales = {}
         for k in gt_all_scales.keys():
             input_all_scales[k] = np.concatenate((gt_all_scales[k][:, :, :input_n], np.repeat(gt_all_scales[k][:, :, input_n-1:input_n], output_n, axis=-1)), axis=-1)
@@ -73,7 +64,6 @@ class MotionDataset(Dataset):
             input_all_scales[k] = (input_all_scales[k] - self.global_min) / (self.global_max - self.global_min)
             input_all_scales[k] = input_all_scales[k] * 2 - 1
 
-        # todo 加速调试 *********************************
         little = np.arange(0, input_all_scales[list(input_all_scales.keys())[0]].shape[0], debug_step)
         for k in input_all_scales:
             input_all_scales[k] = input_all_scales[k][little]
