@@ -1,17 +1,9 @@
 #!/usr/bin/env python
 # encoding: utf-8
-'''
-@project : MSRGCN
-@file    : dct.py
-@author  : Droliven
-@contact : droliven@163.com
-@ide     : PyCharm
-@time    : 2021-07-27 21:18
-'''
+
 import torch
 import numpy as np
 
-# ********************** 离散余弦变换基础帧 ****************************
 
 def get_dct_matrix(N):
     dct_m = np.eye(N)
