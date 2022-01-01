@@ -5,7 +5,7 @@
 
 
 
- In this project, we integrated discrete cosine transformation with a multi-scale residual graph convolution network in this project to accurately predict future human movements from recorded histories. To offer intermediate oversight, losses are added to all scales. We predict 50 frames in the future using a brief recorded historical posture sequence of 25 frames as input. On the entire test dataset, we test and compare the suggested strategy with prior state-of-the-art methodologies. On two typical benchmark datasets, our methodology beats the state-of-the-art approaches
+  In this project, we integrated discrete cosine transformation with a multi-scale residual graph convolution network in this project to accurately predict future human movements from recorded histories. To offer intermediate oversight, losses are added to all scales. We predict 50 frames in the future using a brief recorded historical posture sequence of 25 frames as input. On the entire test dataset, we test and compare the suggested strategy with prior state-of-the-art methodologies. On two typical benchmark datasets, our methodology beats the state-of-the-art approaches
 
 ## Dependencies
 
